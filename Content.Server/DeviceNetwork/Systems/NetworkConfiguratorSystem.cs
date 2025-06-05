@@ -18,6 +18,7 @@ using JetBrains.Annotations;
 using Robust.Server.Audio;
 using Robust.Server.GameObjects;
 using Robust.Shared.Audio;
+using Robust.Shared.Prototypes;
 using Robust.Shared.Player;
 using Robust.Shared.Timing;
 using Robust.Shared.Utility;
@@ -37,6 +38,10 @@ public sealed class NetworkConfiguratorSystem : SharedNetworkConfiguratorSystem
     [Dependency] private readonly SharedAppearanceSystem _appearanceSystem = default!;
     [Dependency] private readonly IGameTiming _gameTiming = default!;
     [Dependency] private readonly IAdminLogManager _adminLogger = default!;
+    [Dependency] private readonly IPrototypeManager _prototypeManager = default!;
+
+    private const int MaxLinks = 256;
+    private const int MaxPortLength = 32;
 
     public override void Initialize()
     {
@@ -646,6 +651,9 @@ public sealed class NetworkConfiguratorSystem : SharedNetworkConfiguratorSystem
         if (!configurator.ActiveDeviceLink.HasValue || !configurator.DeviceLinkTarget.HasValue)
             return;
 
+        if (!ValidatePorts(args.Source, args.Sink))
+            return;
+
         if (TryComp(configurator.ActiveDeviceLink, out DeviceLinkSourceComponent? activeSource) && TryComp(configurator.DeviceLinkTarget, out DeviceLinkSinkComponent? targetSink))
         {
             _deviceLinkSystem.ToggleLink(
@@ -686,11 +694,15 @@ public sealed class NetworkConfiguratorSystem : SharedNetworkConfiguratorSystem
 
         if (TryComp(configurator.ActiveDeviceLink, out DeviceLinkSourceComponent? activeSource) && TryComp(configurator.DeviceLinkTarget, out DeviceLinkSinkComponent? targetSink))
         {
+            var links = ValidateLinks(args.Links);
+            if (links.Count == 0)
+                return;
+
             _deviceLinkSystem.SaveLinks(
                 args.Session.AttachedEntity,
                 configurator.ActiveDeviceLink.Value,
                 configurator.DeviceLinkTarget.Value,
-                args.Links,
+                links,
                 activeSource,
                 targetSink
                 );
@@ -704,11 +716,15 @@ public sealed class NetworkConfiguratorSystem : SharedNetworkConfiguratorSystem
         }
         else if (TryComp(configurator.DeviceLinkTarget, out DeviceLinkSourceComponent? targetSource) && TryComp(configurator.ActiveDeviceLink, out DeviceLinkSinkComponent? activeSink))
         {
+            var links = ValidateLinks(args.Links);
+            if (links.Count == 0)
+                return;
+
             _deviceLinkSystem.SaveLinks(
                 args.Session.AttachedEntity,
                 configurator.DeviceLinkTarget.Value,
                 configurator.ActiveDeviceLink.Value,
-                args.Links,
+                links,
                 targetSource,
                 activeSink
                 );
@@ -811,6 +827,41 @@ public sealed class NetworkConfiguratorSystem : SharedNetworkConfiguratorSystem
     {
         if (configurator.LinkModeActive)
             args.Cancel();
+    }
+
+    private bool ValidatePorts(string source, string sink)
+    {
+        if (source.Length > MaxPortLength || sink.Length > MaxPortLength)
+        {
+            Logger.Warning($"NetworkConfigurator received overlong port identifiers: {source}/{sink}");
+            return false;
+        }
+
+        if (!_prototypeManager.HasIndex<SourcePortPrototype>(source) || !_prototypeManager.HasIndex<SinkPortPrototype>(sink))
+        {
+            Logger.Warning($"NetworkConfigurator received invalid ports: {source}->{sink}");
+            return false;
+        }
+
+        return true;
+    }
+
+    private List<(string source, string sink)> ValidateLinks(List<(string source, string sink)> links)
+    {
+        var valid = new List<(string source, string sink)>();
+        var count = Math.Min(links.Count, MaxLinks);
+        if (links.Count > MaxLinks)
+            Logger.Warning($"NetworkConfigurator received too many links: {links.Count}, limiting to {MaxLinks}");
+
+        for (var i = 0; i < count; i++)
+        {
+            var (source, sink) = links[i];
+            if (!ValidatePorts(source, sink))
+                continue;
+            valid.Add((source, sink));
+        }
+
+        return valid;
     }
     #endregion
 }

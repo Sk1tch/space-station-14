@@ -66,6 +66,9 @@ public sealed class NetworkConfiguratorToggleLinkMessage : BoundUserInterfaceMes
     public readonly string Source;
     public readonly string Sink;
 
+    /// <summary>
+    /// Sent when toggling a link between two ports. Invalid or unknown ports are discarded server-side.
+    /// </summary>
     public NetworkConfiguratorToggleLinkMessage(string source, string sink)
     {
         Source = source;
@@ -78,6 +81,9 @@ public sealed class NetworkConfiguratorLinksSaveMessage : BoundUserInterfaceMess
 {
     public readonly List<(string source, string sink)> Links;
 
+    /// <summary>
+    /// Sent when saving multiple links. Invalid ports will be ignored by the server.
+    /// </summary>
     public NetworkConfiguratorLinksSaveMessage(List<(string source, string sink)> links)
     {
         Links = links;
