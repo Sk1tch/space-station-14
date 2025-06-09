@@ -183,11 +183,22 @@ namespace Content.Server.Power.Pow3r
                     var supplyAndPassthrough = supplyCap + battery.CurrentReceiving * battery.Efficiency;
 
                     battery.AvailableSupply = Math.Min(scaledSpace, supplyAndPassthrough);
-                    battery.LoadingNetworkDemand = unmet;
 
                     battery.MaxEffectiveSupply = Math.Min(battery.CurrentStorage / frameTime, battery.MaxSupply + battery.CurrentReceiving * battery.Efficiency);
                     totalBatterySupply += battery.AvailableSupply;
                     totalMaxBatterySupply += battery.MaxEffectiveSupply;
+                }
+
+                if (totalMaxBatterySupply > 0)
+                {
+                    foreach (var batteryId in network.BatterySupplies)
+                    {
+                        var battery = state.Batteries[batteryId];
+                        if (!battery.Enabled || !battery.CanDischarge || battery.Paused)
+                            continue;
+
+                        battery.LoadingNetworkDemand = unmet * battery.MaxEffectiveSupply / totalMaxBatterySupply;
+                    }
                 }
             }
 
